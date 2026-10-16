@@ -27,7 +27,7 @@ map <name> {
     key_type = ...;
     value_type = ...;
     size = ...; 
-    lock_type = ...; 
+    lock_type = ...; // split this into multiple things 
 
     //error codes or representations
     key_not_found = <thing of value_type>;
@@ -59,8 +59,17 @@ map <name> {
 # Primitive techniques
 
 ## Slicing
-
-- PENDING
+- First we talk about backward slicing
+- Given a line of code and a subset of variables in that line, we would like to find all the statements in the program and all the variables which will have an impact on these variables
+- **Algorithm**
+    - First, construct the CFG
+    - Consider a topological ordering of the CFG nodes(possible due to lack of loops and function calls)
+    - For each variable, have a dictionary of dependencies(both control flow and data) and dictionary of the slice(list of program statements) for their latest definition. We shall consider all things which are not present in the dictionary (like the first occurrence of phv.ethernet.ethertype for example) as primitives and inputs to the program and **also when a `map.get(key)` for a map that is not read-only would be part of the slice, should we even continue slicing??** because most of our analyses assume that the state dependence of access is not there.
+    - We will also have to maintain running sets which are the set of control flow statements and control flow variables which will end up becoming control flow dependencies of the statements. Whenever there is a branch, we shall have to store a snapshot of this running set and update the running set and once we are done with both the if and else branches - we shall need to restore the running set when we go back to the straight line code
+    - At every definition, we shall compute the union of slices and dependencies of the variables on the RHS and that of the current control flow dependencies and this will be the slice and sets of the current variable
+    - We shall also maintain an output dictionary of `(line,var)` to `(slice,dependencies)` which shall be filled everytime a slice is computed
+    - Note that all Extracts are ignored and they will never be considered in the algorithm
+    
 
 ## Symbolic Execution
 
@@ -87,10 +96,12 @@ map <name> {
 - Strategies for locking which assume the strict condition that the resulting state and outcomes of the parallel processing is as if packets were processed in some sequential order by one core and an NF described by the DSL
 - The techniques are considered in the most general sense and optimisations shall be done later
 - **Should we ask the user to mention what kind of locking he wants?? - Feels like a good idea** 
+- For map-level locking - look into dominaters, to find map ordering
+- can do finer grained locking for those things
 
 ## 1. Snapshot locking
 
-- If the set of maps and keys is a pure function of a packet, we can avoid deadlocks by acquiring locks in a particular pre-defined order 
+- If the set of maps and keys is a pure function of a packet and pre-existing state, we can avoid deadlocks by acquiring locks in a particular pre-defined order 
 - **Algorithm** 
     - Run the state dependence of access check
     - If state dependence is absent, we would like to identify the union of the backward slices of each of the accesses (only the keys and maps). 

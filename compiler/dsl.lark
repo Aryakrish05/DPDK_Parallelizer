@@ -1,0 +1,88 @@
+start: (const_decl | enum_decl | struct_decl | map_decl | process_decl)+
+
+const_decl:  "const" type NAME "=" expr ";"
+
+enum_decl:   "enum" NAME "{" enum_item ("," enum_item)* ","? "}" ";"
+enum_item:   NAME ["=" (INT | HEX)]
+
+struct_decl: "struct" NAME "{" field+ "}" ";"
+field:       type NAME ";"
+
+//map<key, value, lock_type, size, impl[, "header.h"]> name { ... }
+
+map_decl: "map" "<" type "," type "," LOCK_TYPE "," map_size "," NAME ["," STRING] ">" NAME (rmw_ops | no_op) ";"
+map_size: INT | NAME
+LOCK_TYPE: "global" | "key" | "readonly"
+
+rmw_ops: "{" rmw_def+ "}"
+no_op:  "{" "pass" ";" "}"
+
+//an rmw operation must always have code which tells what to do
+//when the key is found and what to do when not found
+
+rmw_def: "void" RMW_NAME "(" type "&" NAME ("," param)* ")" "{" "if" "(" "found" ")" block "else" block "}"
+param:   type NAME
+RMW_NAME.2: /rmw_[A-Za-z0-9_]+/
+
+process_decl: "int" "process" "(" "struct" NAME NAME ")" block
+
+block: "{" stmt+ "}"
+
+?stmt: extract | var_decl | assign | erase | if_stmt | map_if | pass_stmt | ret
+
+extract:   "Extract" "(" lvalue ")" ";"
+var_decl:  type NAME ["=" (expr | init_list)] ";"
+assign:    lvalue "=" expr ";"
+erase:     NAME "." "erase" "(" expr ")" ";"
+pass_stmt: "pass" ";"
+ret:       "return" PACKET_ACTION ";"
+PACKET_ACTION: "FORWARD" | "DROP"
+
+init_list:  "{" field_init ("," field_init)* ","? "}"
+field_init: "." NAME "=" expr
+
+// every if which reads a map must end with an else which tells what to do on failure
+if_stmt: "if" "(" expr ")" block ["else" (if_stmt | block)]
+map_if:  "if" "(" (map_get | map_put | map_rmw) ")" block "else" (block | if_else | map_if)
+if_else: "if" "(" expr ")" block "else" (block | if_else | map_if)
+
+map_get:  type NAME "=" NAME "." "get" "(" expr ")"
+map_put:  NAME "." "put" "(" expr "," expr ")"
+map_rmw:  NAME "." "rmw" "(" expr "," RMW_NAME ("," expr)* ")"
+
+
+?expr: atom | binop | lnotop | bnotop | minusop
+
+binop: atom BINOP atom
+lnotop:  "!" atom
+bnotop:  "~" atom
+minusop: "-" atom
+BINOP: "||" | "&&" | "==" | "!=" | "<=" | ">=" | "<<" | ">>" | "<" | ">" | "|" | "^" | "&" | "+" | "-" | "*"
+
+?atom: INT | HEX | true | false | lvalue | struct_expr | "(" expr ")"
+
+true:  "true"
+false: "false"
+struct_expr : "(" "struct" NAME ")" "{" field_init ("," field_init)* ","? "}"
+lvalue: NAME ("." NAME)*
+
+?type: uint_type | bool_type | struct_type | enum_type
+
+uint_type:   UINT
+bool_type:   "bool"
+struct_type: "struct" NAME
+enum_type:   "enum" NAME
+
+UINT.2: /uint[1-9][0-9]?_t(?![A-Za-z0-9_])/
+HEX:    /0x[0-9a-fA-F]+/
+
+// https://github.com/lark-parser/lark/blob/master/lark/grammars/common.lark
+%import common.CNAME -> NAME
+%import common.ESCAPED_STRING -> STRING
+%import common.INT
+%import common.WS
+%import common.CPP_COMMENT
+%import common.C_COMMENT
+%ignore WS
+%ignore CPP_COMMENT
+%ignore C_COMMENT

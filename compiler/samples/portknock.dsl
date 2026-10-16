@@ -20,19 +20,7 @@ struct array_elem {
   uint32_t state;
 };
 
-map port_state {
-    key_type = uint32_t;
-    value_type = struct array_elem;
-    size = 1; 
-    lock_type = global; 
-
-    //error codes or representations
-    key_not_found = {0};
-    insertion_failure_map_full = 0;
-    deletion_failure_key_not_found = 0;
-
-    implementation_header_file = "counter.h";
-}
+map<uint32_t, struct array_elem, global, 1, array> port_state { pass; };
 
 int process(struct phv phv){
     uint16_t dport;
@@ -53,23 +41,29 @@ int process(struct phv phv){
         return DROP;
     }
 
-    struct array_elem value = port_state.get(0);
-
-    if(value.state == OPEN){
-        return FORWARD;
+    if(struct array_elem value = port_state.get(0)){
+        if(value.state == OPEN){
+            return FORWARD;
+        }
+        if ((value.state == CLOSED_0) && (dport == PORT_1)) {
+            value.state = CLOSED_1;  
+        } else if ((value.state == CLOSED_1) && (dport == PORT_2)) {
+            value.state = CLOSED_2;
+        } else if ((value.state == CLOSED_2) && (dport == PORT_3)) {
+            value.state = OPEN;
+        } else {
+            value.state = CLOSED_0;
+        }
+        if(port_state.put(0,value)){
+            pass;
+        }
+        else{
+            pass;
+        }
     }
-    
-    if (value.state == CLOSED_0 && dport == PORT_1) {
-        value.state = CLOSED_1;
-        
-    } else if (value.state == CLOSED_1 && dport == PORT_2) {
-        value.state = CLOSED_2;
-    } else if (value.state == CLOSED_2 && dport == PORT_3) {
-        value.state = OPEN;
-    } else {
-        value.state = CLOSED_0;
+    else{
+        pass;
     }
-    port_state.put(0,value);
     
     // need to add stuff like swap_src_dst_mac(data);
     return FORWARD;
