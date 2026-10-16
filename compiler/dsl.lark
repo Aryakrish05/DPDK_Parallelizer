@@ -47,8 +47,8 @@ if_stmt: "if" "(" (map_get | map_put | map_rmw | expr) ")" block ["else" (if_stm
 
 map_get:  type NAME "=" NAME "." "get" "(" expr ")"
 map_put:  NAME "." "put" "(" expr "," expr ")"
-map_rmw:  NAME "." "rmw" "(" expr "," RMW_NAME ("," expr)* ")"
-
+map_rmw:  NAME "." "rmw" "(" expr "," RMW_NAME args_list ")"
+args_list: ("," expr)*
 
 ?expr: atom | binop | lnotop | bnotop | minusop
 
@@ -58,8 +58,9 @@ bnotop:  "~" atom
 minusop: "-" atom
 BINOP: "||" | "&&" | "==" | "!=" | "<=" | ">=" | "<<" | ">>" | "<" | ">" | "|" | "^" | "&" | "+" | "-" | "*"
 
-?atom: integer_literal | boolean_literal | lvalue | struct_expr | "(" expr ")"
+?atom: integer_literal | boolean_literal | lvalue | struct_expr | bracketed_expr
 
+bracketed_expr: "(" expr ")"
 struct_expr : "(" struct_type ")" field_inits
 lvalue: NAME ("." NAME)*
 
@@ -72,7 +73,7 @@ enum_type:   "enum" NAME
 
 integer_literal: INT | HEX
 boolean_literal: BOOL
-BOOL: "true" | "false"
+BOOL.2: "true" | "false"
 
 UINT.2: /uint[1-9][0-9]?_t(?![A-Za-z0-9_])/
 HEX:    /0x[0-9a-fA-F]+/
