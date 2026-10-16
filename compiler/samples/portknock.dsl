@@ -20,7 +20,7 @@ struct array_elem {
   uint32_t state;
 };
 
-map<uint32_t, struct array_elem, global, 1, array> port_state { pass; };
+map<uint32_t, struct array_elem, global, 1, array> port_state;
 
 int process(struct phv phv){
     uint16_t dport;
@@ -54,15 +54,7 @@ int process(struct phv phv){
         } else {
             value.state = CLOSED_0;
         }
-        if(port_state.put(0,value)){
-            pass;
-        }
-        else{
-            pass;
-        }
-    }
-    else{
-        pass;
+        if(port_state.put(0,value)){ }
     }
     
     // need to add stuff like swap_src_dst_mac(data);
