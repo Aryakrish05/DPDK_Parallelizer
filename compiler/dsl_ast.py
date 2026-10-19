@@ -18,6 +18,10 @@ class _Type(_Ast):
     pass
 
 @dataclass
+class Start(_Ast,ast_utils.AsList):
+    decls: List[Union[MapDecl,StructDecl,ProcessDecl,ConstDecl,EnumDecl]]
+    
+@dataclass
 class UintType(_Type):
     size: int
 
