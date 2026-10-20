@@ -5,7 +5,6 @@ from typing import List, Optional, Union, Tuple
 from dataclasses import *
 
 from lark import ast_utils, Transformer, v_args
-from lark.tree import Meta
 
 this_module = sys.modules[__name__]
 
