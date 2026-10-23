@@ -6,6 +6,20 @@
 #include "Program.hpp"
 #include <thread>
 #include <vector>
+#include <cassert>
+
+// https://eli.thegreenplace.net/2016/c11-threads-affinity-and-hyperthreading/
+// pin a thread to an lcore (for now we consider each hardware thread 
+// as a core although two may share the same cpu)
+void pin_pthread_to_lcore(pthread_t t, int lcore_no){
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(lcore_no, &cpuset);
+    int rc = pthread_setaffinity_np(t,sizeof(cpu_set_t), &cpuset);
+    if (rc != 0) {
+        std::cerr << "Error calling pthread_setaffinity_np for pthread id = " << t << " : " << rc << "\n";
+    }
+}
 
 int main(int argc, char** argv){
     Config config = parseArgs(argc,argv);
@@ -22,9 +36,14 @@ int main(int argc, char** argv){
         nic.addTXQueue(tx_queue);
     }
 
+    pin_pthread_to_lcore(pthread_self(),0);
+
     std::vector<std::jthread>core_threads;
+    unsigned int num_lcores = std::thread::hardware_concurrency();
+    assert(num_lcores);
     for(size_t i=0;i<config.num_cores;i++){
         core_threads.emplace_back(&Core::run,&cores[i]);
+        pin_pthread_to_lcore(core_threads[i].native_handle(),(i+1)%num_lcores);
     }
 
     nic.run();

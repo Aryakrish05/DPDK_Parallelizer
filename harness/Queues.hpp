@@ -75,14 +75,12 @@ bool RXQueueImpl<LockedQueue>::enqueue(Packet packet){
 
 template<template<typename> class LockedQueue>
 void RXQueueImpl<LockedQueue>::rxBurst(PacketBatch& packet_batch,size_t burst_size){
-    for(size_t i=0;i<burst_size;i++){
+    for(size_t i=0;i<burst_size && packet_batch.size<MAX_BATCH_SIZE;i++){
         auto item = queue_.tryDequeue();
         if(!item){
             break;
         }
-        if(!packet_batch.addPacket(*item)){
-            break;   
-        }
+        packet_batch.addPacket(*item);
     }
 }
 
