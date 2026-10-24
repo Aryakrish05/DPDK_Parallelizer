@@ -64,11 +64,11 @@ NetworkInterface::~NetworkInterface(){
 }
 
 bool NetworkInterface::recvPacket(Packet& packet){
-    ssize_t n = recv(sockfd_, packet.buffer->bytes.data(), MAX_PACKET_SIZE, MSG_TRUNC);
-    if(n>MAX_PACKET_SIZE || n<=0){
+    ssize_t n = recv(sockfd_, packet.buffer->bytes.data()+HEADROOM, MAX_PACKET_SIZE-HEADROOM, MSG_TRUNC);
+    if(n>static_cast<ssize_t>(MAX_PACKET_SIZE-HEADROOM) || n<=0){
         return false;
     }
-    packet.data = packet.buffer->bytes.data();
+    packet.data = packet.buffer->bytes.data()+HEADROOM;
     packet.data_end = packet.data + n;
     return true;
 }

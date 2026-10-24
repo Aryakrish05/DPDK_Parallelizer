@@ -10,6 +10,9 @@ constexpr size_t MAX_PACKET_SIZE = 4096;
 constexpr size_t MAX_BATCH_SIZE = 5;
 // in some ways like maximum burst size
 
+//https://doc.dpdk.org/guides/prog_guide/mbuf_lib.html
+constexpr size_t HEADROOM = 128;
+
 struct PacketBuffer{
     std::array<char,MAX_PACKET_SIZE>bytes;
 };
@@ -18,6 +21,12 @@ struct Packet{
     PacketBuffer* buffer;
     char* data;
     char* data_end;
+    char* get_data_begin(){
+        return data;
+    }
+    char* get_data_end(){
+        return data_end;
+    }
 };
 
 enum class PacketAction{

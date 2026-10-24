@@ -13,7 +13,7 @@ struct SharedState{
 };
 
 PacketAction process(Packet& packet, SharedState& shared, LocalState& local){
-    std::cout<<"Received "<<packet.data_end-packet.data<<" bytes\n";
+    std::cout<<"Received "<<packet.get_data_end()-packet.get_data_begin()<<" bytes\n";
     return PacketAction::TX;
 }
 
