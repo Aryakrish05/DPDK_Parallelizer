@@ -20,7 +20,7 @@ struct Packet{
     char* data_end;
 };
 
-enum PacketAction{
+enum class PacketAction{
     TX,
     DROP,
 };

@@ -1,8 +1,12 @@
+#ifndef LOCKMANAGERS_HPP
+#define LOCKMANAGERS_HPP
+
 #include <array>
 #include <algorithm>
 #include <cassert>
 #include <functional>
 #include <cstdint>
+#include "Locks.hpp"
 
 // max_entries is trivially the maximum number of map calls present in a particular program
 
@@ -14,7 +18,7 @@
 template<int max_entries,typename Lock>
 class LockManager{
 public:
-    void addLock(Lock* lock){
+    void addLock(Lock* lock, LockingMode mode){
         assert(num_locks_<max_entries && !locked);
         lock_list_[num_locks_++] = lock;
     }
@@ -76,9 +80,11 @@ public:
     
     //we only support TwoPhaseLock following the wait-die method with some wait 
     //returns true if lock is already held or lock succeeds, false if it fails, when we should abort
-    bool addAndLock(TwoPhaseLock* lock){
+    bool addAndLock(TwoPhaseLock* lock, LockingMode mode){
         assert(num_locks_ < max_entries);
         assert(lock!=nullptr);
+        assert(timestamp_!=0);
+
         for(int i=0;i<num_locks_;i++){
             if(lock_list_[i]==lock){
                 return true;
@@ -154,3 +160,5 @@ private:
     int num_locks_ = 0;
     int num_dirty_ = 0;
 };
+
+#endif
