@@ -71,7 +71,7 @@ private:
 //we shall also have a commit function which unlocks all the locks and switches the copy bit
 
 
-template<int max_entries,typename TwoPhaseLock,typename MapEntry>
+template<int max_entries,typename TwoPhaseLock>
 class TwoPhaseLockManager{
 public:
     void setTimestamp(uint64_t cur_timestamp){
@@ -117,6 +117,9 @@ public:
     }
 
     void abort(){
+        for(int i=0;i<num_dirty_;i++){
+            dirty_list_[i][1] = false;
+        }
         for(int i=0;i<num_locks_;i++){
             if(lock_list_[i]!=nullptr){
                 lock_list_[i]->unlock();
@@ -127,13 +130,9 @@ public:
     }
 
     void commit(){
-        std::sort(dirty_list_.begin(),dirty_list_.begin()+num_dirty_,[](MapEntry* e1,MapEntry* e2){
-                                                                return reinterpret_cast<std::uintptr_t>(e1)<reinterpret_cast<std::uintptr_t>(e2);
-                                                            });
         for(int i=0;i<num_dirty_;i++){
-            if(i==0 || (dirty_list_[i]!=dirty_list_[i-1])){
-                dirty_list_[i]->swapBuffer();
-            }
+            dirty_list_[i][0] = !dirty_list_[i][0];
+            dirty_list_[i][1] = false;
         }
 
         for(int i=0;i<num_locks_;i++){
@@ -147,16 +146,27 @@ public:
         num_dirty_ = 0;
     }
     
-    void addDirty(MapEntry* entry){
+    void addDirty(bool* meta){
+        assert(meta!=nullptr);
+        if(meta[1]){
+            return;
+        }
         assert(num_dirty_<max_entries);
-        assert(entry!=nullptr);
-        dirty_list_[num_dirty_++] = entry;
+        meta[1] = true;
+        dirty_list_[num_dirty_++] = meta;
     }
 
 private:
     uint64_t timestamp_ = 0;
     std::array<TwoPhaseLock*, max_entries> lock_list_;
-    std::array<MapEntry*,max_entries> dirty_list_;
+
+    //contains the pointers to bool meta[2] for each entry
+    //for every map entry, 
+    //meta[0] refers to the current active entry
+    //meta[1] refers to the dirty bit (needed for the core to find out where to read from)
+    //also, this is enough as we are allowing only whole entry writes into the maps
+    //if we were allowing field wise manipulation, we need to have field wise copies and metadata
+    std::array<bool*,max_entries> dirty_list_;
     int num_locks_ = 0;
     int num_dirty_ = 0;
 };
