@@ -5,6 +5,7 @@
 #include<queue>
 #include<mutex>
 #include<array>
+#include<cstdint>
 
 constexpr size_t MAX_PACKET_SIZE = 4096;
 constexpr size_t MAX_BATCH_SIZE = 5;
@@ -21,11 +22,19 @@ struct Packet{
     PacketBuffer* buffer;
     char* data;
     char* data_end;
+    uint64_t timestamp = 0;
+
     char* get_data_begin(){
         return data;
     }
     char* get_data_end(){
         return data_end;
+    }
+    //strictly to be used by 2PL - kinda wrong to read it for others
+    //https://doc.dpdk.org/guides-23.11/nics/features.html#timestamp-offload
+    //https://doc.dpdk.org/guides/sample_app_ug/rxtx_callbacks.html
+    uint64_t get_timestamp(){
+        return timestamp;
     }
 };
 
