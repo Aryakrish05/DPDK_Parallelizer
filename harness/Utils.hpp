@@ -2,6 +2,9 @@
 #define UTILS_HPP
 
 #include <cstdint>
+#include <vector>
+#include <pair>
+#include <iostream>
 
 //functions for getting big endian stuff within 8 bytes and storing them
 
@@ -24,6 +27,12 @@ void store_be(char* p, uint64_t v){
         p[i] = static_cast<char>(v & 0xff);
         v = v>>8;
     }
+}
+
+//dump any std::vector<std::pair<blah,blah>>
+template<typename First,typename Second>
+void dump(std::vector<std::pair<First,Second>>& contents){
+    
 }
 
 #endif
