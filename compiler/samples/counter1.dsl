@@ -8,14 +8,10 @@ struct phv{
     struct ethhdr eth;
 };
 
-struct counter {
-  uint32_t count;
-};
-
-map<uint32_t, struct counter, key, 1, array> count;
+map<uint32_t, uint32_t, key, 1, array> count;
 
 int process(struct phv phv){
     Extract(phv.eth);
-    if(count.rmw(0,rmw_add,1)){ }
+    count.rmw(0,rmw_add,1);
     return DROP;
 }

@@ -12,11 +12,12 @@ field:  type NAME ";"
 
 //map<key, value, lock_type, size, impl[, "header.h"]> name { ... }
 
-map_decl: "map" "<" type "," type "," LOCK_TYPE "," map_size "," NAME ["," STRING] ">" NAME [rmw_ops] ";"
+map_decl: "map" "<" type "," type "," LOCK_TYPE "," map_size "," NAME ["," STRING] ">" NAME ["{" map_default rmw_ops "}"] ";"
 map_size: INT | NAME
 LOCK_TYPE: "global" | "key" | "readonly"
 
-rmw_ops: "{" rmw_def+ "}"
+map_default: ["default" "=" expr ";"]
+rmw_ops: rmw_def*
 
 //an rmw operation must always have code which tells what to do
 //when the key is found and what to do when not found
@@ -30,24 +31,25 @@ process_decl: "int" "process" "(" struct_type NAME ")" block
 
 block: "{" stmt* "}"
 
-?stmt: extract | var_decl | assign | erase | if_stmt | ret
+?stmt: extract | var_decl | assign | map_stmt | if_stmt | ret
 
 extract:   "Extract" "(" lvalue ")" ";"
-var_decl:  type NAME ["=" expr] ";"
-assign:    lvalue "=" expr ";"
-erase:     NAME "." "erase" "(" expr ")" ";"
+var_decl:  type NAME ["=" (expr | map_expr)] ";"
+assign:    lvalue "=" (expr | map_expr) ";"
+map_stmt:  map_expr ";"
 ret:       "return" PACKET_ACTION ";"
 PACKET_ACTION: "FORWARD" | "DROP"
 
 field_inits:  "{" field_init ("," field_init)* ","? "}"
 field_init: "." NAME "=" expr
 
-// every if which reads a map must end with an else which tells what to do on failure
-if_stmt: "if" "(" (map_get | map_put | map_rmw | expr) ")" block ["else" (if_stmt | block)]
+if_stmt: "if" "(" expr ")" block ["else" (if_stmt | block)]
 
-map_get:  type NAME "=" NAME "." "get" "(" expr ")"
-map_put:  NAME "." "put" "(" expr "," expr ")"
-map_rmw:  NAME "." "rmw" "(" expr "," RMW_NAME args_list ")"
+?map_expr: map_get | map_put | map_erase | map_rmw
+map_get:   NAME "." "get" "(" expr "," lvalue ")"
+map_put:   NAME "." "put" "(" expr "," expr ")"
+map_erase: NAME "." "erase" "(" expr ")"
+map_rmw:   NAME "." "rmw" "(" expr "," RMW_NAME args_list ")"
 args_list: ("," expr)*
 
 ?expr: atom | binop | lnotop | bnotop | minusop

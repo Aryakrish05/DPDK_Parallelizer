@@ -41,7 +41,9 @@ int process(struct phv phv){
         return DROP;
     }
 
-    if(struct array_elem value = port_state.get(0)){
+    struct array_elem value;
+    bool found = port_state.get(0,value);
+    if(found){
         if(value.state == OPEN){
             return FORWARD;
         }
@@ -54,7 +56,7 @@ int process(struct phv phv){
         } else {
             value.state = CLOSED_0;
         }
-        if(port_state.put(0,value)){ }
+        port_state.put(0,value);
     }
     
     // need to add stuff like swap_src_dst_mac(data);

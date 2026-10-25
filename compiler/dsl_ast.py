@@ -86,16 +86,20 @@ class _MapExpr(_Ast):
 
 @dataclass
 class MapGet(_MapExpr):
-    value_type: _Type
-    value_name: str 
     map_name: str
     key: _Expr
-    
+    value: Lvalue
+
 @dataclass
 class MapPut(_MapExpr):
     map_name: str 
     key: _Expr
     value:_Expr
+
+@dataclass
+class MapErase(_MapExpr):
+    map_name: str
+    key: _Expr
 
 @dataclass
 class MapRmw(_MapExpr):
@@ -115,18 +119,17 @@ class Block(_Ast,ast_utils.AsList):
 @dataclass
 class VarDecl(_Stmt):
     var_type: _Type
-    var_name: str 
-    expr: Optional[_Expr]
+    var_name: str
+    expr: Optional[Union[_Expr,_MapExpr]]
 
 @dataclass
 class Assign(_Stmt):
     var_name: Lvalue
-    expr: _Expr
+    expr: Union[_Expr,_MapExpr]
 
 @dataclass
-class Erase(_Stmt):
-    map_name: str
-    key: _Expr
+class MapStmt(_Stmt):
+    map_expr: _MapExpr
 
 @dataclass
 class Ret(_Stmt):
@@ -138,7 +141,7 @@ class Extract(_Stmt):
 
 @dataclass
 class IfStmt(_Stmt):
-    cond: Union[_Expr,_MapExpr] 
+    cond: _Expr
     if_block: Block
     else_block: Optional[Union[IfStmt,Block]]
 
@@ -175,6 +178,7 @@ class MapDecl(_Ast):
     impl: str
     header: Optional[str]
     name: str
+    default: Optional[_Expr]
     rmw_ops: Optional[List[RmwDef]]
     
 @dataclass
@@ -228,6 +232,8 @@ class DSLTransformer(Transformer):
     # Map Decl
     def map_size(self,n):
         return n[0]
+    def map_default(self,args):
+        return args[0]
     def rmw_ops(self,args):
         return args
     def param(self,args):
