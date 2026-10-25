@@ -5,6 +5,11 @@
 #include <stdexcept>
 #include "Packet.hpp"
 #include "Queues.hpp"
+#ifdef PROGRAM
+#include PROGRAM
+#else
+#include "Program.hpp"
+#endif
 
 class Distributor{
 public:

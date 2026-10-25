@@ -3,7 +3,11 @@
 
 #include <memory>
 #include "Packet.hpp"
+#ifdef PROGRAM
+#include PROGRAM
+#else
 #include "Program.hpp"
+#endif
 #include "Queues.hpp"
 
 class Core{

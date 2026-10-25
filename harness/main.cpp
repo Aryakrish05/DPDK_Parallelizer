@@ -3,7 +3,11 @@
 #include "NIC.hpp"
 #include "Core.hpp"
 #include "Queues.hpp"
+#ifdef PROGRAM
+#include PROGRAM
+#else
 #include "Program.hpp"
+#endif
 #include <thread>
 #include <vector>
 #include <cassert>

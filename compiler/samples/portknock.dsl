@@ -20,7 +20,7 @@ struct array_elem {
   uint32_t state;
 };
 
-map<uint32_t, struct array_elem, global, 1, array> port_state;
+map<uint32_t, struct array_elem, auto, 1, array> port_state;
 
 int process(struct phv phv){
     uint16_t dport;

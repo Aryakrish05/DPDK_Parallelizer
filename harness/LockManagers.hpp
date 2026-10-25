@@ -35,7 +35,9 @@ public:
     }
     void unlockOne(Lock* lock){
         assert(locked);
-        assert(lock!=nullptr);
+        if(lock==nullptr){
+            return;
+        }
         bool held = false;
         for(int i=0;i<num_locks_;i++){
             if(lock_list_[i]==lock){
@@ -81,16 +83,18 @@ public:
     //we only support TwoPhaseLock following the wait-die method with some wait 
     //returns true if lock is already held or lock succeeds, false if it fails, when we should abort
     bool addAndLock(TwoPhaseLock* lock, LockingMode mode){
-        assert(num_locks_ < max_entries);
-        assert(lock!=nullptr);
         assert(timestamp_!=0);
+        if(lock==nullptr){
+            return true;
+        }
 
         for(int i=0;i<num_locks_;i++){
             if(lock_list_[i]==lock){
                 return true;
             }
         }
-        if(lock->lock(timestamp_)){ 
+        assert(num_locks_ < max_entries);
+        if(lock->lock(timestamp_)){
             lock_list_[num_locks_++] = lock;
             return true;
         }
@@ -102,7 +106,9 @@ public:
         //full trust the compiler to unlock only the readonly locks
         //i have no way of detecting it
         //also we have no duplicates due to the way addAndLock is done
-        assert(lock!=nullptr);
+        if(lock==nullptr){
+            return;
+        }
         bool locked = false;
         for(int i=0;i<num_locks_;i++){
             if(lock_list_[i]==lock){

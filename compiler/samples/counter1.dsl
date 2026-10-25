@@ -8,7 +8,7 @@ struct phv{
     struct ethhdr eth;
 };
 
-map<uint32_t, uint32_t, key, 1, array> count;
+map<uint32_t, uint32_t, auto, 1, array> count;
 
 int process(struct phv phv){
     Extract(phv.eth);

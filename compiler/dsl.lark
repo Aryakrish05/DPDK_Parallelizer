@@ -14,7 +14,13 @@ field:  type NAME ";"
 
 map_decl: "map" "<" type "," type "," LOCK_TYPE "," map_size "," NAME ["," STRING] ">" NAME ["{" map_default rmw_ops "}"] ";"
 map_size: INT | NAME
-LOCK_TYPE: "global" | "key" | "readonly"
+
+//ideally, we want to allow different locking methods for a map,
+//for the first working implementation, we let the map choose the method
+//hashmap uses separate chaining with locks on buckets for now
+//array uses per element locking
+//in the future - we wish to support readonly, key-wise, global locking
+LOCK_TYPE: "auto"
 
 map_default: ["default" "=" expr ";"]
 rmw_ops: rmw_def*
