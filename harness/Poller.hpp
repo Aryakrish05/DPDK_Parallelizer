@@ -12,8 +12,10 @@ class Poller {
 public:
     void addItem(PollItem);
     void run();
+    void stop();
 private:
     std::vector<PollItem> items_;
+    bool stopped_ = false;
 };
 
 void Poller::addItem(PollItem item){
@@ -21,11 +23,15 @@ void Poller::addItem(PollItem item){
 }
 
 void Poller::run(){
-    while(true){
+    while(!stopped_){
         for(size_t i=0;i<items_.size();i++){
             items_[i].poll();
         }
     }
+}
+
+void Poller::stop(){
+    stopped_ = true;
 }
 
 #endif

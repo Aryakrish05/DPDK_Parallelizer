@@ -6,11 +6,11 @@
 #include <vector>
 
 #include "Queues.hpp"
-#include "NetworkInterface.hpp"
 #include "Poller.hpp"
 #include "Distributor.hpp"
 #include "Packet.hpp"
 
+template<typename Interface>
 class NIC{
 public:
     explicit NIC(const std::string&,std::shared_ptr<BufferPool>);
@@ -19,12 +19,13 @@ public:
     void run();
 private:
     Poller poller_;
-    NetworkInterface intf_;
+    Interface intf_;
     Distributor distributor_;
     std::shared_ptr<BufferPool> buffer_pool_;
 };
 
-NIC::NIC(const std::string& intf_name,std::shared_ptr<BufferPool> pool):intf_(intf_name),buffer_pool_(pool){
+template<typename Interface>
+NIC<Interface>::NIC(const std::string& intf_name,std::shared_ptr<BufferPool> pool):intf_(intf_name),buffer_pool_(pool){
     auto receive_action = 
         [this](){
             Packet pkt;
@@ -33,22 +34,34 @@ NIC::NIC(const std::string& intf_name,std::shared_ptr<BufferPool> pool):intf_(in
                 intf_.discardPacket();
             }
             else if(intf_.recvPacket(pkt)){
-                if(!distributor_.distribute(pkt)){
+                if(Interface::lossless){
+                    while(!distributor_.distribute(pkt));
+                }
+                else if(!distributor_.distribute(pkt)){
                     buffer_pool_->release(pkt.buffer);
                 }
-            }   
+            }
             else{
                 buffer_pool_->release(pkt.buffer);
             }
         };
     poller_.addItem({receive_action});
+    auto stop_action =
+        [this](){
+            if(intf_.done() && buffer_pool_->allFree()){
+                poller_.stop();
+            }
+        };
+    poller_.addItem({stop_action});
 }
 
-void NIC::addRXQueue(std::shared_ptr<RXQueue> queue_ptr){
+template<typename Interface>
+void NIC<Interface>::addRXQueue(std::shared_ptr<RXQueue> queue_ptr){
     distributor_.addRXQueue(queue_ptr);
 }
 
-void NIC::addTXQueue(std::shared_ptr<TXQueue> queue_ptr){
+template<typename Interface>
+void NIC<Interface>::addTXQueue(std::shared_ptr<TXQueue> queue_ptr){
     auto transmit_action = 
         [this,queue_ptr](){
             auto item = queue_ptr->dequeue();
@@ -60,7 +73,8 @@ void NIC::addTXQueue(std::shared_ptr<TXQueue> queue_ptr){
     poller_.addItem({transmit_action});
 }
 
-void NIC::run(){
+template<typename Interface>
+void NIC<Interface>::run(){
     poller_.run();
 }
 #endif

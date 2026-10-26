@@ -61,6 +61,7 @@ public:
     explicit BufferPool(size_t);
     PacketBuffer* acquire();
     void release(PacketBuffer*);
+    bool allFree();
 private:
     std::vector<PacketBuffer> buffers_;
     std::queue<PacketBuffer*> free_buffers_;
@@ -85,6 +86,12 @@ PacketBuffer* BufferPool::acquire(){
 void BufferPool::release(PacketBuffer* free_buf){
     std::lock_guard<std::mutex>locked(lock_);
     free_buffers_.push(free_buf);
+}
+
+//need this to know when to stop
+bool BufferPool::allFree(){
+    std::lock_guard<std::mutex>locked(lock_);
+    return free_buffers_.size()==buffers_.size();
 }
 
 #endif

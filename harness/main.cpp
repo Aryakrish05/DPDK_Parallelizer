@@ -1,6 +1,8 @@
 #include "ArgParse.hpp"
 #include "Packet.hpp"
 #include "NIC.hpp"
+#include "NetworkInterface.hpp"
+#include "PCAPInterface.hpp"
 #include "Core.hpp"
 #include "Queues.hpp"
 #ifdef PROGRAM
@@ -11,6 +13,7 @@
 #include <thread>
 #include <vector>
 #include <cassert>
+#include <cstdlib>
 
 // https://eli.thegreenplace.net/2016/c11-threads-affinity-and-hyperthreading/
 // pin a thread to an lcore (for now we consider each hardware thread 
@@ -25,11 +28,11 @@ void pin_pthread_to_lcore(pthread_t t, int lcore_no){
     }
 }
 
-int main(int argc, char** argv){
-    Config config = parseArgs(argc,argv);
+template<typename Interface>
+void runHarness(const Config& config){
     std::shared_ptr<BufferPool> buffer_pool = std::make_shared<BufferPool>(config.buffer_pool_size);
     std::shared_ptr<SharedState> shared_state = std::make_shared<SharedState>();
-    NIC nic(config.intf_name,buffer_pool);
+    NIC<Interface> nic(config.intf_name,buffer_pool);
     std::vector<Core>cores;
 
     for(size_t i=0;i<config.num_cores;i++){
@@ -51,4 +54,16 @@ int main(int argc, char** argv){
     }
 
     nic.run();
+    //the cores loop forever, every packet (in pcap) is done once nic.run returns
+    std::exit(0);
+}
+
+int main(int argc, char** argv){
+    Config config = parseArgs(argc,argv);
+    if(config.pcap){
+        runHarness<PCAPInterface>(config);
+    }
+    else{
+        runHarness<NetworkInterface>(config);
+    }
 }

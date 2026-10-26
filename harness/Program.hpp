@@ -14,6 +14,7 @@ struct SharedState{
 
 PacketAction process(Packet& packet, SharedState& shared, LocalState& local){
     std::cout<<"Timestamp = "<<packet.get_timestamp()<<"\n";
+    packet.timestamp+=100;
     std::cout<<"Received "<<packet.get_data_end()-packet.get_data_begin()<<" bytes\n";
     return PacketAction::TX;
 }

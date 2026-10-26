@@ -30,7 +30,9 @@ void Distributor::addRXQueue(std::shared_ptr<RXQueue>new_queue){
 }
 
 bool Distributor::distribute(Packet packet){
-    packet.timestamp = ++timestamp_;
+    if(packet.timestamp==0){
+        packet.timestamp = ++timestamp_;
+    }
     for(size_t count = 0; count<queues_.size(); count++){
         if(queues_[next_]->enqueue(packet)){
             next_=(next_+1)%queues_.size();

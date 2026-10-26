@@ -10,7 +10,9 @@
 
 
 struct Config {
+    //interface name, or "<input>,<output>" when pcap is set
     std::string intf_name;
+    bool pcap = false;
     unsigned num_cores = 1;
     unsigned queue_size = 5;
     unsigned buffer_pool_size = 1024;
@@ -18,8 +20,9 @@ struct Config {
 
 void printUsage(const char* prog){
     std::cerr <<
-        "Usage: " << prog << " -i <interface> [-c <num_cores>] [-q <queue_size>] [-b <buffer_pool_size>]\n"
-        "  -i <name>   Network interface to bind (required)\n"
+        "Usage: " << prog << " (-i <interface> | -p <input>,<output>) [-c <num_cores>] [-q <queue_size>] [-b <buffer_pool_size>]\n"
+        "  -i <name>   Network interface to bind\n"
+        "  -p <in,out> Read packets from <in> and write transmitted packets to <out> (harness packet format)\n"
         "  -c <n>      Number of Core threads (default: 1)\n"
         "  -q <n>      RX/TX queue size (default: 5)\n"
         "  -b <n>      Buffer pool size (default: 1024)\n"
@@ -39,13 +42,19 @@ unsigned parsePositiveInt(const char* s, const char* flag){
 Config parseArgs(int argc, char** argv){
     Config cfg;
     bool have_interface = false;
+    bool have_pcap = false;
 
     int opt;
-    while ((opt = getopt(argc, argv, "i:c:q:b:h")) != -1) {
+    while ((opt = getopt(argc, argv, "i:p:c:q:b:h")) != -1) {
         switch (opt) {
             case 'i':
                 cfg.intf_name = optarg;
                 have_interface = true;
+                break;
+            case 'p':
+                cfg.intf_name = optarg;
+                cfg.pcap = true;
+                have_pcap = true;
                 break;
             case 'c':
                 cfg.num_cores = parsePositiveInt(optarg, "-c");
@@ -65,8 +74,8 @@ Config parseArgs(int argc, char** argv){
         }
     }
 
-    if (!have_interface) {
-        std::cerr << "Error: -i is required\n";
+    if (have_interface == have_pcap) {
+        std::cerr << "Error: exactly one of -i and -p is required\n";
         printUsage(argv[0]);
         std::exit(EXIT_FAILURE);
     }

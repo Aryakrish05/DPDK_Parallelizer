@@ -23,9 +23,14 @@ public:
     NetworkInterface(NetworkInterface&&) = delete;
     NetworkInterface& operator = (NetworkInterface&&) = delete;
 
+    static constexpr bool lossless = false;
+
     bool recvPacket(Packet&);
     bool sendPacket(const Packet&);
     bool discardPacket();
+    bool done(){
+        return false;
+    }
     ~NetworkInterface();
 private:
     int sockfd_;
@@ -68,6 +73,7 @@ bool NetworkInterface::recvPacket(Packet& packet){
     if(n>static_cast<ssize_t>(MAX_PACKET_SIZE-HEADROOM) || n<=0){
         return false;
     }
+    packet.timestamp = 0;
     packet.data = packet.buffer->bytes.data()+HEADROOM;
     packet.data_end = packet.data + n;
     return true;
