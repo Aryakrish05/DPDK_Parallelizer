@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <string>
 #include <functional>
 #include <mutex>
 #include <type_traits>
@@ -19,13 +20,15 @@ enum class LockKind{
     AUTO
 };
 
-template<typename KeyType, typename ValueType, size_t size, typename Lock, LockKind kind/*ignore*/,typename Manager,size_t max_value_size>
+template<typename KeyType, typename ValueType, uint32_t size, typename Lock, LockKind kind/*ignore*/,typename Manager,uint32_t max_value_size>
 class ArrayMap{
     static_assert(std::is_unsigned_v<KeyType>,"something wrong with the codegen, array keys must be uintN");
+    static_assert(std::has_unique_object_representations_v<ValueType>,"value type has padding bytes");
+    static_assert(size>0);
 public:
-    ArrayMap(const ValueType& default_value):default_(default_value){init_values();}
+    ArrayMap(const ValueType& default_value,std::string name):default_(default_value),name_(name){init_values();}
     //call default constructor, as these are structs, it will be 0 initialized
-    ArrayMap():default_(){init_values();}
+    explicit ArrayMap(std::string name):default_(),name_(name){init_values();}
     Lock* lock_for(const KeyType& key){
         if(key>=size){
             return nullptr;
@@ -33,11 +36,12 @@ public:
         return &entries_[key].lock;
     }
     //copies by value - this guarantees that the only writes that happen are at map.put()
-    bool get(const KeyType& key, ValueType& value){
+    bool get(const KeyType& key, ValueType& value, Manager& mgr){
         if(key>=size){
             value = default_;
             return false;
         }
+        mgr.addLogRecord(get_log_record(&entries_[key],Operation::READ,entries_[key].value,entries_[key].value));
         value = entries_[key].value;
         return true;
     }
@@ -71,7 +75,9 @@ public:
     }
 
     void dump(LogRecord<max_value_size>& record,std::ostream& out){
-
+        Entry* entry = static_cast<Entry*>(record.entry_ptr);
+        KeyType key = static_cast<KeyType>(entry - entries_.data());
+        write_record<KeyType,ValueType,max_value_size>(out,name_,key,record);
     }
     
 private:
@@ -80,7 +86,7 @@ private:
         ValueType value;
     };
     void init_values(){
-        for(size_t i=0;i<size;i++){
+        for(uint32_t i=0;i<size;i++){
             entries_[i].value = default_;
         }
     }
@@ -89,6 +95,7 @@ private:
     }
     std::array<Entry,size> entries_;
     ValueType default_;
+    std::string name_;
 };
 
 template<typename Node>
@@ -161,14 +168,15 @@ private:
     Node* head_ = nullptr;
 };
 
-template<typename KeyType, typename ValueType, size_t size, typename Lock, LockKind kind/*ignore*/,typename Manager,size_t max_value_size>
+template<typename KeyType, typename ValueType, uint32_t size, typename Lock, LockKind kind/*ignore*/,typename Manager,uint32_t max_value_size>
 class HashMap{
     //ensure you pad the key values appropriately
     static_assert(std::has_unique_object_representations_v<KeyType>,"key type has padding bytes");
+    static_assert(std::has_unique_object_representations_v<ValueType>,"value type has padding bytes");
     static_assert(size>0);
 public:
-    HashMap():default_(){init_map();}
-    HashMap(const ValueType& default_value):default_(default_value){init_map();}
+    explicit HashMap(std::string name):default_(),name_(name){init_map();}
+    HashMap(const ValueType& default_value,std::string name):default_(default_value),name_(name){init_map();}
 
     //returns a lock regardless of whether the key is present or not...
     Lock* lock_for(const KeyType& key){
@@ -176,12 +184,13 @@ public:
     }
 
     //assumes that the bucket lock is held
-    bool get(const KeyType& key, ValueType& value){
+    bool get(const KeyType& key, ValueType& value, Manager& mgr){
         Entry* entry = find_entry(buckets_[get_bucket_number(key)],key);
         if(entry==nullptr){
             value = default_;
             return false;
         }
+        mgr.addLogRecord(get_log_record(entry,Operation::READ,entry->value,entry->value));
         value = entry->value;
         return true;
     }
@@ -243,11 +252,12 @@ public:
     }
 
     void dump(LogRecord<max_value_size>& record,std::ostream& out){
-
+        Entry* entry = static_cast<Entry*>(record.entry_ptr);
+        write_record<KeyType,ValueType,max_value_size>(out,name_,entry->key,record);
     }
 
 private:
-    static constexpr size_t bucket_size = 64;
+    static constexpr uint32_t bucket_size = 64;
 
     struct Entry{
         KeyType key;
@@ -262,7 +272,7 @@ private:
     static uint64_t hash(const KeyType& key){
         const uint8_t* p = reinterpret_cast<const uint8_t*>(&key);
         uint64_t h = 0xcbf29ce484222325ULL;
-        size_t len = sizeof(KeyType);
+        uint32_t len = sizeof(KeyType);
         while(len--){
             h ^= *p++;
             h *= 0x100000001b3ULL;
@@ -270,7 +280,7 @@ private:
         return h;
     }
 
-    static size_t get_bucket_number(const KeyType& key){
+    static uint32_t get_bucket_number(const KeyType& key){
         return hash(key)%bucket_size;
     }
 
@@ -281,7 +291,7 @@ private:
     }
 
     void init_map(){
-        for(size_t i=size;i-->0;){
+        for(uint32_t i=size;i-->0;){
             freelist_.insert(&mempool_[i]);
         }
     }
@@ -294,6 +304,7 @@ private:
     std::array<EntryBucket,bucket_size> buckets_;
     ValueType default_;
     FreeList<Entry> freelist_;
+    std::string name_;
 };
 
 #endif

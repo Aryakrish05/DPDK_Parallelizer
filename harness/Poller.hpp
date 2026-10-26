@@ -24,7 +24,7 @@ void Poller::addItem(PollItem item){
 
 void Poller::run(){
     while(!stopped_){
-        for(size_t i=0;i<items_.size();i++){
+        for(uint32_t i=0;i<items_.size();i++){
             items_[i].poll();
         }
     }

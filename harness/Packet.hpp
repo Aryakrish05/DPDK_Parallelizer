@@ -7,12 +7,12 @@
 #include<array>
 #include<cstdint>
 
-constexpr size_t MAX_PACKET_SIZE = 4096;
-constexpr size_t MAX_BATCH_SIZE = 5;
+constexpr uint32_t MAX_PACKET_SIZE = 4096;
+constexpr uint32_t MAX_BATCH_SIZE = 5;
 // in some ways like maximum burst size
 
 //https://doc.dpdk.org/guides/prog_guide/mbuf_lib.html
-constexpr size_t HEADROOM = 128;
+constexpr uint32_t HEADROOM = 128;
 
 struct PacketBuffer{
     std::array<char,MAX_PACKET_SIZE>bytes;
@@ -46,7 +46,7 @@ enum class PacketAction{
 
 struct PacketBatch{
     std::array<Packet,MAX_BATCH_SIZE>packets;
-    size_t size = 0;
+    uint32_t size = 0;
     bool addPacket(Packet);
 };
 
@@ -58,7 +58,7 @@ bool PacketBatch::addPacket(Packet packet){
 
 struct BufferPool{
 public:
-    explicit BufferPool(size_t);
+    explicit BufferPool(uint32_t);
     PacketBuffer* acquire();
     void release(PacketBuffer*);
     bool allFree();
@@ -68,8 +68,8 @@ private:
     std::mutex lock_;
 };
 
-BufferPool::BufferPool(size_t num_buffers):buffers_(num_buffers){
-    for(size_t i=0;i<num_buffers;i++){
+BufferPool::BufferPool(uint32_t num_buffers):buffers_(num_buffers){
+    for(uint32_t i=0;i<num_buffers;i++){
         free_buffers_.push(&buffers_[i]);
     }
 }

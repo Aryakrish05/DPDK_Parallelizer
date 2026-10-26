@@ -39,8 +39,8 @@ void Core::run(){
         // in the future add provisions to configure this
         rx_queue_->rxBurst(pkt_batch,MAX_BATCH_SIZE);
         if(pkt_batch.size==0)continue;
-        size_t tx_count = 0;
-        for(size_t i=0;i<pkt_batch.size;i++){
+        uint32_t tx_count = 0;
+        for(uint32_t i=0;i<pkt_batch.size;i++){
             Packet& pkt = pkt_batch.packets[i];
             PacketAction pkt_action = process(pkt,*shared_state_,local_state_);
             if(pkt_action == PacketAction::TX){

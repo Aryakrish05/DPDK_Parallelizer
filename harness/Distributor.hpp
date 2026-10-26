@@ -21,7 +21,7 @@ public:
     bool distribute(Packet);
 private:
     std::vector<std::shared_ptr<RXQueue>> queues_;
-    size_t next_ = 0;
+    uint32_t next_ = 0;
     uint64_t timestamp_ = 0;
 };
 
@@ -33,7 +33,7 @@ bool Distributor::distribute(Packet packet){
     if(packet.timestamp==0){
         packet.timestamp = ++timestamp_;
     }
-    for(size_t count = 0; count<queues_.size(); count++){
+    for(uint32_t count = 0; count<queues_.size(); count++){
         if(queues_[next_]->enqueue(packet)){
             next_=(next_+1)%queues_.size();
             return true;

@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <string>
 #include <type_traits>
 #include "Locks.hpp"
 
@@ -20,10 +21,11 @@ enum class LogAction{
 enum class Operation{
     INSERT,
     UPDATE,
-    ERASE
+    ERASE,
+    READ // only for testing
 };
 
-template<size_t max_value_size>
+template<uint32_t max_value_size>
 struct LogRecord{
     void (*process) (LogRecord& record, LogAction action);
     void* map;
@@ -34,7 +36,7 @@ struct LogRecord{
     uint8_t new_value[max_value_size];
 };
 
-template<typename Map, size_t max_value_size>
+template<typename Map, uint32_t max_value_size>
 void process_log(LogRecord<max_value_size>& record, LogAction action){
     Map* map = static_cast<Map*>(record.map);
     if(action==LogAction::COMMIT){
@@ -45,12 +47,34 @@ void process_log(LogRecord<max_value_size>& record, LogAction action){
     }
 }
 
-template<typename Map, size_t max_value_size>
+//it is assumed that we have opened the stream with std::ios::binary
+template<typename Map, uint32_t max_value_size>
 void dump_log(LogRecord<max_value_size>& record, std::ostream& out){
     static_cast<Map*>(record.map)->dump(record,out);
 }
 
-template<typename Map, size_t max_value_size, typename ValueType>
+//record format: [name size u8][name][op u8][key size u32][key][value size u32][prev value][new value]
+template<typename KeyType, typename ValueType, uint32_t max_value_size>
+void write_record(std::ostream& out, std::string& name, KeyType& key, LogRecord<max_value_size>& record){
+    assert(name.size()<=UINT8_MAX);
+    uint8_t name_size = static_cast<uint8_t>(name.size());
+    out.write(reinterpret_cast<char*>(&name_size),sizeof(uint8_t));
+    out.write(name.data(),name_size);
+
+    uint8_t op = static_cast<uint8_t>(record.op);
+    out.write(reinterpret_cast<char*>(&op),sizeof(uint8_t));
+
+    uint32_t key_size = sizeof(KeyType);
+    out.write(reinterpret_cast<char*>(&key_size),sizeof(uint32_t));
+    out.write(reinterpret_cast<char*>(&key),sizeof(KeyType));
+
+    uint32_t value_size = sizeof(ValueType);
+    out.write(reinterpret_cast<char*>(&value_size),sizeof(uint32_t));
+    out.write(reinterpret_cast<char*>(record.prev_value),sizeof(ValueType));
+    out.write(reinterpret_cast<char*>(record.new_value),sizeof(ValueType));
+}
+
+template<typename Map, uint32_t max_value_size, typename ValueType>
 LogRecord<max_value_size> make_log_record(Map* map, void* entry_ptr, Operation op, const ValueType& prev_value, const ValueType& new_value){
     static_assert(sizeof(ValueType)<=max_value_size);
     static_assert(std::is_trivially_copyable_v<ValueType>);
@@ -73,9 +97,13 @@ LogRecord<max_value_size> make_log_record(Map* map, void* entry_ptr, Operation o
 //then when you call lockAll, it sorts the locks in a pre-defined order
 //there may be unlock at any point of time, so unlockOne is a function (TODO - ANALYSE THIS AND USE IN FURTHER VERSIONS)
 //also has unlockAll when the packet gets dropped and all
-template<size_t max_entries,typename Lock,size_t max_value_size>
+template<uint32_t max_entries,typename Lock,uint32_t max_value_size>
 class LockManager{
 public:
+    void setTimestamp(uint64_t cur_timestamp){
+        timestamp_ = cur_timestamp;
+    }
+
     void addLock(Lock* lock, LockingMode mode){
         assert(num_locks_<max_entries && !locked);
         lock_list_[num_locks_++] = lock;
@@ -88,7 +116,9 @@ public:
     }
 
     void dump(std::ostream& out){
-        for(size_t i=0;i<num_log_records_;i++){
+        out.write(reinterpret_cast<char*>(&timestamp_),sizeof(uint64_t));
+        out.write(reinterpret_cast<char*>(&num_log_records_),sizeof(uint32_t));
+        for(uint32_t i=0;i<num_log_records_;i++){
             log_record_list_[i].dump(log_record_list_[i],out);
         }
     }
@@ -96,7 +126,7 @@ public:
         std::sort(lock_list_.begin(),lock_list_.begin()+num_locks_,[](Lock* lk1,Lock* lk2){
                                                                         return reinterpret_cast<std::uintptr_t>(lk1)<reinterpret_cast<std::uintptr_t>(lk2);
                                                                     });
-        for(size_t i=0;i<num_locks_;i++){
+        for(uint32_t i=0;i<num_locks_;i++){
             if(lock_list_[i]!=nullptr && (i==0 || (lock_list_[i-1]!=lock_list_[i]))){
                 lock_list_[i]->lock();
             }
@@ -110,7 +140,7 @@ public:
             return;
         }
         bool held = false;
-        for(size_t i=0;i<num_locks_;i++){
+        for(uint32_t i=0;i<num_locks_;i++){
             if(lock_list_[i]==lock){
                 held = true;
                 lock_list_[i] = nullptr;
@@ -124,11 +154,11 @@ public:
         assert(locked);
         //throw this away eventually and modify maps
         //this is needed only because we are using the logging for the tests
-        for(size_t i=0;i<num_log_records_;i++){
+        for(uint32_t i=0;i<num_log_records_;i++){
             log_record_list_[i].process(log_record_list_[i],LogAction::COMMIT);
         }
         // assumes that lockAll was called and the array is sorted except for nullptrs in bw
-        for(size_t i=0;i<num_locks_;i++){
+        for(uint32_t i=0;i<num_locks_;i++){
             if(lock_list_[i]!=nullptr && (i==0 || (lock_list_[i-1]!=lock_list_[i]))){
                 lock_list_[i]->unlock();
             }
@@ -139,10 +169,11 @@ public:
     }
 private:
     std::array<Lock*, max_entries> lock_list_;
-    size_t num_locks_ = 0;
+    uint32_t num_locks_ = 0;
     bool locked = false;
     std::array<LogRecord<max_value_size>,max_entries> log_record_list_;
-    size_t num_log_records_ = 0;
+    uint32_t num_log_records_ = 0;
+    uint64_t timestamp_ = 0;
 };
 
 //a lock manager for 2 phase locking
@@ -153,7 +184,7 @@ private:
 //we shall also have a commit function which unlocks all the locks and commits the log
 
 
-template<size_t max_entries,typename TwoPhaseLock,size_t max_value_size>
+template<uint32_t max_entries,typename TwoPhaseLock,uint32_t max_value_size>
 class TwoPhaseLockManager{
 public:
     void setTimestamp(uint64_t cur_timestamp){
@@ -168,7 +199,7 @@ public:
             return true;
         }
 
-        for(size_t i=0;i<num_locks_;i++){
+        for(uint32_t i=0;i<num_locks_;i++){
             if(lock_list_[i]==lock){
                 return true;
             }
@@ -191,7 +222,7 @@ public:
             return;
         }
         bool locked = false;
-        for(size_t i=0;i<num_locks_;i++){
+        for(uint32_t i=0;i<num_locks_;i++){
             if(lock_list_[i]==lock){
                 lock->unlock();
                 lock_list_[i] = nullptr;
@@ -205,10 +236,10 @@ public:
     */
 
     void abort(){
-        for(size_t i=num_log_records_;i-->0;){
+        for(uint32_t i=num_log_records_;i-->0;){
             log_record_list_[i].process(log_record_list_[i],LogAction::UNDO);
         }
-        for(size_t i=0;i<num_locks_;i++){
+        for(uint32_t i=0;i<num_locks_;i++){
             if(lock_list_[i]!=nullptr){
                 lock_list_[i]->unlock();
             }
@@ -219,11 +250,11 @@ public:
 
     //log is processed before unlocking, erased nodes must be freed while still locked
     void commit(){
-        for(size_t i=0;i<num_log_records_;i++){
+        for(uint32_t i=0;i<num_log_records_;i++){
             log_record_list_[i].process(log_record_list_[i],LogAction::COMMIT);
         }
 
-        for(size_t i=0;i<num_locks_;i++){
+        for(uint32_t i=0;i<num_locks_;i++){
             if(lock_list_[i]!=nullptr){
                 lock_list_[i]->unlock();
             }
@@ -241,7 +272,9 @@ public:
 
     //call before commit, the log is cleared by commit and abort
     void dump(std::ostream& out){
-        for(size_t i=0;i<num_log_records_;i++){
+        out.write(reinterpret_cast<char*>(&timestamp_),sizeof(uint64_t));
+        out.write(reinterpret_cast<char*>(&num_log_records_),sizeof(uint32_t));
+        for(uint32_t i=0;i<num_log_records_;i++){
             log_record_list_[i].dump(log_record_list_[i],out);
         }
     }
@@ -250,8 +283,8 @@ private:
     uint64_t timestamp_ = 0;
     std::array<TwoPhaseLock*, max_entries> lock_list_;
     std::array<LogRecord<max_value_size>,max_entries> log_record_list_;
-    size_t num_locks_ = 0;
-    size_t num_log_records_ = 0;
+    uint32_t num_locks_ = 0;
+    uint32_t num_log_records_ = 0;
 };
 
 #endif

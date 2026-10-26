@@ -9,22 +9,22 @@
 template<typename T>
 class SimpleLockedQueue{
 public:
-    explicit SimpleLockedQueue(size_t);
+    explicit SimpleLockedQueue(uint32_t);
     bool tryEnqueue(T);
     std::optional<T> tryDequeue();
 private:
     std::queue<T> queue_;
     std::mutex lock_;
-    size_t capacity_;
+    uint32_t capacity_;
 };
 
 template<template<typename> class LockedQueue>
 class RXQueueImpl{
 public:
-    explicit RXQueueImpl(size_t);
+    explicit RXQueueImpl(uint32_t);
     bool enqueue(Packet);
     // returns with as many packets as it is able to collect
-    void rxBurst(PacketBatch&,size_t);
+    void rxBurst(PacketBatch&,uint32_t);
 private:
     LockedQueue<Packet> queue_;
 };
@@ -32,7 +32,7 @@ private:
 template<template<typename> class LockedQueue>
 class TXQueueImpl{
 public:
-    explicit TXQueueImpl(size_t);
+    explicit TXQueueImpl(uint32_t);
     std::optional<Packet> dequeue();
     // blocks till all the packets in the batch are sent
     void txBurst(PacketBatch&);
@@ -42,7 +42,7 @@ private:
 
 
 template<typename T>
-SimpleLockedQueue<T>::SimpleLockedQueue(size_t capacity):capacity_(capacity){}
+SimpleLockedQueue<T>::SimpleLockedQueue(uint32_t capacity):capacity_(capacity){}
 
 template<typename T>
 bool SimpleLockedQueue<T>::tryEnqueue(T item){
@@ -66,7 +66,7 @@ std::optional<T> SimpleLockedQueue<T>::tryDequeue(){
 }
 
 template<template<typename> class LockedQueue>
-RXQueueImpl<LockedQueue>::RXQueueImpl(size_t capacity):queue_(capacity){}
+RXQueueImpl<LockedQueue>::RXQueueImpl(uint32_t capacity):queue_(capacity){}
 
 template<template<typename> class LockedQueue>
 bool RXQueueImpl<LockedQueue>::enqueue(Packet packet){
@@ -74,8 +74,8 @@ bool RXQueueImpl<LockedQueue>::enqueue(Packet packet){
 }
 
 template<template<typename> class LockedQueue>
-void RXQueueImpl<LockedQueue>::rxBurst(PacketBatch& packet_batch,size_t burst_size){
-    for(size_t i=0;i<burst_size && packet_batch.size<MAX_BATCH_SIZE;i++){
+void RXQueueImpl<LockedQueue>::rxBurst(PacketBatch& packet_batch,uint32_t burst_size){
+    for(uint32_t i=0;i<burst_size && packet_batch.size<MAX_BATCH_SIZE;i++){
         auto item = queue_.tryDequeue();
         if(!item){
             break;
@@ -85,7 +85,7 @@ void RXQueueImpl<LockedQueue>::rxBurst(PacketBatch& packet_batch,size_t burst_si
 }
 
 template<template<typename> class LockedQueue>
-TXQueueImpl<LockedQueue>::TXQueueImpl(size_t capacity):queue_(capacity){}
+TXQueueImpl<LockedQueue>::TXQueueImpl(uint32_t capacity):queue_(capacity){}
 
 template<template<typename> class LockedQueue>
 std::optional<Packet> TXQueueImpl<LockedQueue>::dequeue(){
@@ -94,7 +94,7 @@ std::optional<Packet> TXQueueImpl<LockedQueue>::dequeue(){
 
 template<template<typename> class LockedQueue>
 void TXQueueImpl<LockedQueue>::txBurst(PacketBatch& packet_batch){
-    for(size_t i=0;i<packet_batch.size;i++){
+    for(uint32_t i=0;i<packet_batch.size;i++){
         while(!queue_.tryEnqueue(packet_batch.packets[i])){}
     }
 }

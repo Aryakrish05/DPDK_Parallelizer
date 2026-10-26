@@ -35,7 +35,7 @@ void runHarness(const Config& config){
     NIC<Interface> nic(config.intf_name,buffer_pool);
     std::vector<Core>cores;
 
-    for(size_t i=0;i<config.num_cores;i++){
+    for(uint32_t i=0;i<config.num_cores;i++){
         std::shared_ptr<RXQueue> rx_queue = std::make_shared<RXQueue>(config.queue_size);
         std::shared_ptr<TXQueue> tx_queue = std::make_shared<TXQueue>(config.queue_size);
         cores.emplace_back(rx_queue,tx_queue,shared_state,buffer_pool);
@@ -48,7 +48,7 @@ void runHarness(const Config& config){
     std::vector<std::jthread>core_threads;
     unsigned int num_lcores = std::thread::hardware_concurrency();
     assert(num_lcores);
-    for(size_t i=0;i<config.num_cores;i++){
+    for(uint32_t i=0;i<config.num_cores;i++){
         core_threads.emplace_back(&Core::run,&cores[i]);
         pin_pthread_to_lcore(core_threads[i].native_handle(),(i+1)%num_lcores);
     }
