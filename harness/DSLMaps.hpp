@@ -1,15 +1,14 @@
 #ifndef DSLMAPS_HPP
 #define DSLMAPS_HPP
 
-#include<array>
-#include<bit>
-#include<cassert>
-#include<cstdint>
-#include<cstring>
-#include<mutex>
-#include<type_traits>
-#include<vector>
-#include<pair>
+#include <array>
+#include <cassert>
+#include <cstdint>
+#include <cstring>
+#include <functional>
+#include <mutex>
+#include <type_traits>
+#include "LockManagers.hpp"
 
 //in the future, GLOBAL, PER_KEY and NONE
 //refs for better maps in the future - but none of them allow serializability
@@ -20,12 +19,7 @@ enum class LockKind{
     AUTO
 };
 
-enum class StrategyKind{
-    SNAPSHOT,
-    TWOPHASE
-};
-
-template<typename KeyType, typename ValueType, uint32_t size, typename Lock, LockKind kind/*ignore*/>
+template<typename KeyType, typename ValueType, size_t size, typename Lock, LockKind kind/*ignore*/,typename Manager,size_t max_value_size>
 class ArrayMap{
     static_assert(std::is_unsigned_v<KeyType>,"something wrong with the codegen, array keys must be uintN");
 public:
@@ -38,7 +32,7 @@ public:
         }
         return &entries_[key].lock;
     }
-    //copies by value - allows us to mark dirty properly for 2PL
+    //copies by value - this guarantees that the only writes that happen are at map.put()
     bool get(const KeyType& key, ValueType& value){
         if(key>=size){
             value = default_;
@@ -48,36 +42,126 @@ public:
         return true;
     }
 
-    bool put(const KeyType& key, const ValueType& value){
+    bool put(const KeyType& key, const ValueType& value, Manager& mgr){
         if(key>=size){
             return false;
         }
+        mgr.addLogRecord(get_log_record(&entries_[key],Operation::UPDATE,entries_[key].value,value));
         entries_[key].value = value;
         return true;
     }
 
-    bool erase(const KeyType& key){
+    bool erase(const KeyType& key, Manager& mgr){
         if(key>=size){
             return false;
         }
+        mgr.addLogRecord(get_log_record(&entries_[key],Operation::ERASE,entries_[key].value,default_));
         entries_[key].value = default_;
         return true;
     }
+
+    void undo(LogRecord<max_value_size>& record){
+        Entry* entry = static_cast<Entry*>(record.entry_ptr);
+        std::memcpy(&entry->value,&record.prev_value,sizeof(ValueType));
+    }
+
+    void commit(LogRecord<max_value_size>& record){
+        //not really needed
+        return;
+    }
+
+    void dump(LogRecord<max_value_size>& record,std::ostream& out){
+
+    }
+    
 private:
     struct Entry{
         Lock lock;
         ValueType value;
     };
     void init_values(){
-        for(uint32_t i=0;i<size;i++){
+        for(size_t i=0;i<size;i++){
             entries_[i].value = default_;
         }
+    }
+    LogRecord<max_value_size> get_log_record(Entry* entry_ptr,Operation op,const ValueType& prev_value,const ValueType& new_value){
+        return make_log_record<ArrayMap,max_value_size>(this,entry_ptr,op,prev_value,new_value);
     }
     std::array<Entry,size> entries_;
     ValueType default_;
 };
 
-template<typename KeyType, typename ValueType, uint32_t size, typename Lock, LockKind kind/*ignore*/>
+template<typename Node>
+class FreeList{
+public:
+    void insert(Node* node){
+        std::lock_guard<std::mutex>lk_guard(lock_);
+        node->next = head_;
+        head_ = node;
+    }
+
+    //returns nullptr if empty
+    Node* remove(){
+        std::lock_guard<std::mutex>lk_guard(lock_);
+        if(head_==nullptr){
+            return nullptr;
+        }
+        Node* node = head_;
+        head_ = head_->next;
+        return node;
+    }
+private:
+    std::mutex lock_;
+    Node* head_ = nullptr;
+};
+
+//assumes that the lock is held for every function
+template<typename Node, typename Lock>
+class Bucket{
+public:
+    Lock* get_lock(){
+        return &lock_;
+    }
+
+    void insert(Node* node){
+        node->prev = nullptr;
+        node->next = head_;
+        if(head_!=nullptr){
+            head_->prev = node;
+        }
+        head_ = node;
+    }
+
+    void remove(Node* node){
+        if(head_==node){
+            assert(node->prev==nullptr);
+            head_ = node->next;
+        }
+        else{
+            node->prev->next = node->next;
+        }
+        if(node->next!=nullptr){
+            node->next->prev = node->prev;
+        }
+    }
+
+    //returns the first node satisfying match, nullptr if none
+    Node* find(const std::function<bool(Node*)>& match){
+        Node* ptr = head_;
+        while(ptr!=nullptr){
+            if(match(ptr)){
+                return ptr;
+            }
+            ptr = ptr->next;
+        }
+        return nullptr;
+    }
+private:
+    Lock lock_;
+    Node* head_ = nullptr;
+};
+
+template<typename KeyType, typename ValueType, size_t size, typename Lock, LockKind kind/*ignore*/,typename Manager,size_t max_value_size>
 class HashMap{
     //ensure you pad the key values appropriately
     static_assert(std::has_unique_object_representations_v<KeyType>,"key type has padding bytes");
@@ -88,7 +172,7 @@ public:
 
     //returns a lock regardless of whether the key is present or not...
     Lock* lock_for(const KeyType& key){
-        return &buckets_[get_bucket_number(key)].lock;
+        return buckets_[get_bucket_number(key)].get_lock();
     }
 
     //assumes that the bucket lock is held
@@ -103,71 +187,67 @@ public:
     }
 
     //assumes that the bucket lock is held
-    bool put(const KeyType& key, const ValueType& value){
-        Bucket& bucket = buckets_[get_bucket_number(key)];
+    bool put(const KeyType& key, const ValueType& value, Manager& mgr){
+        EntryBucket& bucket = buckets_[get_bucket_number(key)];
         Entry* entry = find_entry(bucket,key);
         if(entry!=nullptr){
+            mgr.addLogRecord(get_log_record(entry,Operation::UPDATE,entry->value,value));
             entry->value = value;
             return true;
         }
 
-        std::lock_guard<std::mutex>lk_guard(freelist_lock_);
-        if(freelist_==nullptr){
+        Entry* new_entry = freelist_.remove();
+        if(new_entry==nullptr){
             return false;
         }
-        Entry* new_entry = freelist_;
-        freelist_ = freelist_->next;
 
+        mgr.addLogRecord(get_log_record(new_entry,Operation::INSERT,default_,value));
         new_entry->key = key;
         new_entry->value = value;
-        new_entry->prev = nullptr;
-        new_entry->next = bucket.entry_list;
-        if(bucket.entry_list!=nullptr){
-            bucket.entry_list->prev = new_entry;
-        }
-        bucket.entry_list = new_entry;
+        bucket.insert(new_entry);
         return true;
     }
 
     //assumes that the bucket lock is held
-    bool erase(const KeyType& key){
-        Bucket& bucket = buckets_[get_bucket_number(key)];
+    bool erase(const KeyType& key, Manager& mgr){
+        EntryBucket& bucket = buckets_[get_bucket_number(key)];
         Entry* entry = find_entry(bucket,key);
         if(entry==nullptr){
             return false;
         }
-
-        if(bucket.entry_list==entry){
-            assert(entry->prev==nullptr);
-            bucket.entry_list = entry->next;
-        }
-        else{
-            entry->prev->next = entry->next;
-        }
-        if(entry->next!=nullptr){
-            entry->next->prev = entry->prev;
-        }
-
-        std::lock_guard<std::mutex>lk_guard(freelist_lock_);
-        entry->next = freelist_;
-        freelist_ = entry;
+        mgr.addLogRecord(get_log_record(entry,Operation::ERASE,entry->value,default_));
+        bucket.remove(entry);
+        //push back to freelist while committing
         return true;
     }
 
-    //FOR TESTING AND DEBUGGING
-    std::vector<std::pair<KeyType,ValueType>> get_items(){
-        std::vector<std::pair<KeyType,ValueType>> items;
-        for(int i=0;i<bucket_size;i++){
-            Entry* ptr = buckets_[i].entry_list;
-            while(ptr!=nullptr){
-                items.push_back({ptr->key,ptr->value});
-                ptr=ptr->next;
-            }
+    void undo(LogRecord<max_value_size>& record){
+        Entry* entry = static_cast<Entry*>(record.entry_ptr);
+        if(record.op==Operation::UPDATE){
+            std::memcpy(&entry->value,&record.prev_value,sizeof(ValueType));
+        }
+        else if(record.op==Operation::ERASE){
+            buckets_[get_bucket_number(entry->key)].insert(entry);
+        }
+        else if(record.op==Operation::INSERT){
+            buckets_[get_bucket_number(entry->key)].remove(entry);
+            freelist_.insert(entry);
         }
     }
-    
+
+    void commit(LogRecord<max_value_size>& record){
+        //only needed for erase - update and insert are fine only
+        if(record.op==Operation::ERASE){
+            freelist_.insert(static_cast<Entry*>(record.entry_ptr));
+        }
+    }
+
+    void dump(LogRecord<max_value_size>& record,std::ostream& out){
+
+    }
+
 private:
-    static constexpr uint32_t bucket_size = std::bit_ceil(size);
+    static constexpr size_t bucket_size = 64;
 
     struct Entry{
         KeyType key;
@@ -176,16 +256,13 @@ private:
         Entry* prev;
     };
 
-    struct Bucket{
-        Lock lock;
-        Entry* entry_list;
-    };
+    using EntryBucket = Bucket<Entry,Lock>;
 
     //FNV-1a, 64-bit (draft-eastlake-fnv)
     static uint64_t hash(const KeyType& key){
         const uint8_t* p = reinterpret_cast<const uint8_t*>(&key);
         uint64_t h = 0xcbf29ce484222325ULL;
-        uint32_t len = sizeof(KeyType);
+        size_t len = sizeof(KeyType);
         while(len--){
             h ^= *p++;
             h *= 0x100000001b3ULL;
@@ -193,39 +270,30 @@ private:
         return h;
     }
 
-    static uint32_t get_bucket_number(const KeyType& key){
+    static size_t get_bucket_number(const KeyType& key){
         return hash(key)%bucket_size;
     }
 
-    Entry* find_entry(Bucket& bucket, const KeyType& key){
-        Entry* ptr = bucket.entry_list;
-        while(ptr!=nullptr){
-            if(std::memcmp(&ptr->key,&key,sizeof(KeyType))==0){
-                return ptr;
-            }
-            ptr = ptr->next;
-        }
-        return nullptr;
+    Entry* find_entry(EntryBucket& bucket, const KeyType& key){
+        return bucket.find([&key](Entry* entry){
+            return std::memcmp(&entry->key,&key,sizeof(KeyType))==0;
+        });
     }
 
     void init_map(){
-        for(uint32_t i=0;i<size;i++){
-            mempool_[i].next = (i+1<size) ? &mempool_[i+1] : nullptr;
-            mempool_[i].prev = nullptr;
-        }
-        freelist_ = &mempool_[0];
-        for(uint32_t i=0;i<bucket_size;i++){
-            buckets_[i].entry_list = nullptr;
+        for(size_t i=size;i-->0;){
+            freelist_.insert(&mempool_[i]);
         }
     }
 
-    std::array<Entry,size> mempool_;
-    std::array<Bucket,bucket_size> buckets_;
-    ValueType default_;
+    LogRecord<max_value_size> get_log_record(Entry* entry_ptr,Operation op,const ValueType& prev_value,const ValueType& new_value){
+        return make_log_record<HashMap,max_value_size>(this,entry_ptr,op,prev_value,new_value);
+    }
 
-    //free to use our own lock - doesn't have to be the templated lock
-    std::mutex freelist_lock_;
-    Entry* freelist_;
+    std::array<Entry,size> mempool_;
+    std::array<EntryBucket,bucket_size> buckets_;
+    ValueType default_;
+    FreeList<Entry> freelist_;
 };
 
 #endif

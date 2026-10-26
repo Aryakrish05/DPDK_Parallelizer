@@ -33,6 +33,7 @@ struct Packet{
     //strictly to be used by 2PL - kinda wrong to read it for others
     //https://doc.dpdk.org/guides-23.11/nics/features.html#timestamp-offload
     //https://doc.dpdk.org/guides/sample_app_ug/rxtx_callbacks.html
+    //TODO - look at resolution of the timestamps
     uint64_t get_timestamp(){
         return timestamp;
     }

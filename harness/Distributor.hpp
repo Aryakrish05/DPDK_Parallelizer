@@ -11,6 +11,10 @@
 #include "Program.hpp"
 #endif
 
+// add compile guards to this based on SCR and SHARDING
+// the metadata struct and the function for computing metadata will be accessed under these guards
+// similarly for SHARDING - we will access the hash and distribution function under the appropriate guards
+
 class Distributor{
 public:
     void addRXQueue(std::shared_ptr<RXQueue>);

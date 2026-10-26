@@ -29,10 +29,4 @@ void store_be(char* p, uint64_t v){
     }
 }
 
-//dump any std::vector<std::pair<blah,blah>>
-template<typename First,typename Second>
-void dump(std::vector<std::pair<First,Second>>& contents){
-    
-}
-
 #endif
