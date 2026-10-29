@@ -15,7 +15,8 @@ public:
     Core(std::shared_ptr<RXQueue>,
          std::shared_ptr<TXQueue>,
          std::shared_ptr<SharedState>,
-         std::shared_ptr<BufferPool> buffer_pool);
+         std::shared_ptr<BufferPool> buffer_pool,
+         CoreContext ctx);
     void run();
 
 private:
@@ -30,8 +31,9 @@ private:
 Core::Core(std::shared_ptr<RXQueue> rx,
            std::shared_ptr<TXQueue> tx,
            std::shared_ptr<SharedState> shared,
-           std::shared_ptr<BufferPool> pool):
-           rx_queue_(rx), tx_queue_(tx), buffer_pool_(pool), shared_state_(shared){}
+           std::shared_ptr<BufferPool> pool,
+           CoreContext ctx):
+           rx_queue_(rx), tx_queue_(tx), buffer_pool_(pool), shared_state_(shared), local_state_(ctx){}
 
 void Core::run(){
     while(true){
