@@ -21,7 +21,7 @@ rng = random.Random(args.seed)
 
 with open(args.out,"wb") as f:
     ts = 1
-    for _ in range(5):
+    for _ in range(20):
         for src in src_macs:
             for dst in dst_macs:
                 data = bytes(Ether(src=src,dst=dst,type=rng.randrange(0x10000))/Raw(b"x"*46))
