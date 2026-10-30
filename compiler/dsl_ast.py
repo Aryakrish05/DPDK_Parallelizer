@@ -56,6 +56,7 @@ class IntegerLiteral(_Expr):
 @dataclass
 class Lvalue(_Expr,ast_utils.AsList):
     #eg [phv,eth,proto]
+    #eg [phv,eth,src_mac,bytes,index]
     names: List[Union[str,int]]
 
 @dataclass
