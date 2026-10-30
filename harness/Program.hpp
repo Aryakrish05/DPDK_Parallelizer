@@ -7,7 +7,6 @@
 #include "LockManagers.hpp"
 #include "Locks.hpp"
 
-//not worrying about the ntohs thing for now
 struct MacAddress{
     uint8_t bytes[6];
 };

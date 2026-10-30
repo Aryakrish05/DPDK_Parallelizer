@@ -12,6 +12,7 @@
 #endif
 #include <thread>
 #include <vector>
+#include <deque>
 #include <cassert>
 #include <cstdlib>
 
@@ -34,12 +35,12 @@ void runHarness(const Config& config){
     std::shared_ptr<SharedState> shared_state = std::make_shared<SharedState>();
     std::shared_ptr<Serializer> serializer = std::make_shared<Serializer>(config.serialFile());
     NIC<Interface> nic(config.intf_name,buffer_pool);
-    std::vector<Core>cores;
+    std::deque<Core>cores;// std::mutex cannot be moved - so vector.emplace_back gives compilation error
 
     for(uint32_t i=0;i<config.num_cores;i++){
         std::shared_ptr<RXQueue> rx_queue = std::make_shared<RXQueue>(config.queue_size);
         std::shared_ptr<TXQueue> tx_queue = std::make_shared<TXQueue>(config.queue_size);
-        CoreContext ctx{i,serializer,config.dumpFile(i)};
+        CoreContext ctx{config.num_cores,serializer,config.dumpFile(i)};
         cores.emplace_back(rx_queue,tx_queue,shared_state,buffer_pool,ctx);
         nic.addRXQueue(rx_queue);
         nic.addTXQueue(tx_queue);

@@ -36,7 +36,7 @@ private:
 };
 
 struct CoreContext{
-    uint32_t core_id;
+    uint32_t num_cores;
     std::shared_ptr<Serializer> serializer;
     std::string dump_file;
 };

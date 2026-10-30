@@ -35,6 +35,11 @@ public:
     void commit(){
         dump(dump_stream_);
         dump_stream_.flush();
+        //still have to commit as the current impl is not freeing nodes
+        for(uint32_t i=0;i<num_log_records_;i++){
+            log_record_list_[i].process(log_record_list_[i],LogAction::COMMIT);
+        }
+        num_log_records_ = 0;
     }
 
 private:

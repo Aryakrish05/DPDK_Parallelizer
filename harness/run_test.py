@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 from file_handler import read_pcap_file, read_serial_file, read_dump_file, write_pcap_file_in_order
-from checker import check_pcap_equality, check_sharing
+from checker import check_pcap_equality, check_sharing, check_scr
 
 HARNESS_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(HARNESS_DIR, "results")
@@ -85,17 +85,23 @@ results = []
 def check_strategy(strategy, packets, dumps, ref_packets, ref_dump):
     if strategy == "sharing":
         return check_pcap_equality(packets, ref_packets) and check_sharing(dumps, ref_dump)
+    if strategy == "scr":
+        return check_pcap_equality(packets, ref_packets) and check_scr(dumps, ref_dump)
     return None
 
 
-#each strategy on 1 core must behave exactly like the sequential program
-if "sequential" in binaries:
-    seq_packets, seq_serial, seq_dumps = run_harness(binaries["sequential"], input_file, "sequential", 1, num_packets)
-    for strategy in binaries:
-        if strategy == "sequential":
-            continue
-        packets, serial_order, dumps = run_harness(binaries[strategy], input_file, strategy + "_1core", 1, num_packets)
-        results.append(("sequential vs " + strategy + " on 1 core", check_strategy(strategy, packets, dumps, seq_packets, seq_dumps[0])))
+#check A: all strategies on 1 core must behave exactly alike, the first one given (sequential if present) is the reference
+one_core_runs = {}
+for strategy in binaries:
+    one_core_runs[strategy] = run_harness(binaries[strategy], input_file, strategy + "_1core", 1, num_packets)
+
+ref_strategy = list(binaries)[0]
+ref_packets, ref_serial, ref_dumps = one_core_runs[ref_strategy]
+for strategy in one_core_runs:
+    if strategy == ref_strategy:
+        continue
+    packets, serial_order, dumps = one_core_runs[strategy]
+    results.append((ref_strategy + " vs " + strategy + " on 1 core", check_strategy(strategy, packets, dumps, ref_packets, ref_dumps[0])))
 
 #an N core run must match a 1 core run that processes the packets in the N core run's commit order
 #check B: an N core run must match a 1 core run that processes the packets in the N core run's commit order
@@ -116,6 +122,13 @@ if "sharing" in binaries:
         ref_packets, ref_serial, ref_dumps = run_harness(binaries["sharing"], ref_input_file, run_name + "_ref", 1, num_packets)
         passed = ref_serial == serial_order and check_strategy("sharing", packets, dumps, ref_packets, ref_dumps[0])
         results.append(("sharing on 1 core vs " + str(cores) + " cores", passed))
+
+#check C: SCR applies packets in arrival order, so an N core run is compared directly with a 1 core run on the same input
+if "scr" in binaries:
+    ref_packets, ref_serial, ref_dumps = one_core_runs["scr"]
+    for cores in range(2, args.max_cores + 1):
+        packets, serial_order, dumps = run_harness(binaries["scr"], input_file, "scr_" + str(cores) + "cores", cores, num_packets)
+        results.append(("scr on 1 core vs " + str(cores) + " cores", check_strategy("scr", packets, dumps, ref_packets, ref_dumps[0])))
 
 all_passed = True
 for (name, passed) in results:
