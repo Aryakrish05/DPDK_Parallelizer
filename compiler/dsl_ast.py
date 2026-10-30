@@ -36,6 +36,11 @@ class StructType(_Type):
 class EnumType(_Type):
     name: str
 
+@dataclass
+class ArrayType(_Type):
+    elem_type: _Type
+    size: int
+
 # Expressions
 class _Expr(_Ast):
     pass
@@ -51,7 +56,7 @@ class IntegerLiteral(_Expr):
 @dataclass
 class Lvalue(_Expr,ast_utils.AsList):
     #eg [phv,eth,proto]
-    names: List[str]
+    names: List[Union[str,int]]
 
 @dataclass
 class StructExpr(_Expr):
@@ -79,6 +84,11 @@ class Binop(_Expr):
     lexpr: _Expr
     op: str
     rexpr: _Expr
+
+@dataclass
+class ByteOrderConv(_Expr):
+    op: str
+    expr: _Expr
     
 # map expressions
 class _MapExpr(_Ast):
@@ -212,6 +222,8 @@ class DSLTransformer(Transformer):
         return str(s)
     def BINOP(self,s):
         return str(s)
+    def BYTE_ORDER_CONV(self,s):
+        return str(s)
     
     # By default, transformers work on the content themselves
     
@@ -226,8 +238,13 @@ class DSLTransformer(Transformer):
     # Struct Decl
     def field(self,args):
         return (args[0],args[1])
+    def array_field(self,args):
+        return (ArrayType(args[0],int(args[2])),args[1])
     def fields(self,args):
         return args
+
+    def index(self,args):
+        return int(args[0])
     
     # Map Decl
     def map_size(self,n):

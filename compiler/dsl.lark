@@ -7,8 +7,9 @@ enum_items: enum_item ("," enum_item)* ","?
 enum_item:   NAME ["=" integer_literal]
 
 struct_decl: "struct" NAME "{" fields "}" ";"
-fields: field+
+fields: (field | array_field)+
 field:  type NAME ";"
+array_field: type NAME "[" INT "]" ";"
 
 //map<key, value, lock_type, size, impl[, "header.h"]> name { ... }
 
@@ -66,11 +67,15 @@ bnotop:  "~" atom
 minusop: "-" atom
 BINOP: "||" | "&&" | "==" | "!=" | "<=" | ">=" | "<<" | ">>" | "<" | ">" | "|" | "^" | "&" | "+" | "-" | "*"
 
-?atom: integer_literal | boolean_literal | lvalue | struct_expr | bracketed_expr
+?atom: integer_literal | boolean_literal | lvalue | struct_expr | bracketed_expr | byte_order_conv
+
+byte_order_conv: BYTE_ORDER_CONV "(" expr ")"
+BYTE_ORDER_CONV.2: /(ntohs|htons|ntohl|htonl)(?![A-Za-z0-9_])/
 
 bracketed_expr: "(" expr ")"
 struct_expr : "(" struct_type ")" field_inits
-lvalue: NAME ("." NAME)*
+lvalue: NAME ("." NAME | index)*
+index: "[" INT "]"
 
 ?type: uint_type | bool_type | struct_type | enum_type
 
@@ -83,7 +88,7 @@ integer_literal: INT | HEX
 boolean_literal: BOOL
 BOOL.2: "true" | "false"
 
-UINT.2: /uint[1-9][0-9]?_t(?![A-Za-z0-9_])/
+UINT.2: /uint([1-8]|16|32|64)_t(?![A-Za-z0-9_])/
 HEX:    /0x[0-9a-fA-F]+/
 
 // https://github.com/lark-parser/lark/blob/master/lark/grammars/common.lark

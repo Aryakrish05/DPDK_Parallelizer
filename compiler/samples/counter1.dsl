@@ -1,6 +1,10 @@
+struct mac_addr{
+    uint8_t bytes[6];
+};
+
 struct ethhdr{
-    uint48_t src_mac;
-    uint48_t dst_mac;
+    struct mac_addr src_mac;
+    struct mac_addr dst_mac;
     uint16_t proto;
 };
 
